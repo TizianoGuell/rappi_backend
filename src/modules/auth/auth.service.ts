@@ -17,7 +17,7 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const { name, email, password, phone, role: roleParam } = registerDto;
+  const { name, email, password, phone, role: roleParam } = registerDto;
 
     const existing = await this.authRepository.findByEmail(email);
     if (existing)
@@ -41,11 +41,13 @@ export class AuthService {
     }
 
     const hashed = await bcrypt.hash(password, 10);
+    // Map DTO fields (English) to entity column names (Spanish) so TypeORM
+    // inserts into the correct columns (User entity uses 'nombre' and 'telefono').
     const user = this.authRepository.create({
-      name,
+      nombre: name,
       email,
       password: hashed,
-      phone,
+      telefono: phone,
       role,
     } as any);
     const saved = await this.authRepository.save(user);

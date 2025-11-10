@@ -43,7 +43,7 @@ class MigrationsRunner implements OnModuleInit {
       database: join(__dirname, '..', 'RappiDB.db'), 
       entities: [join(__dirname, 'modules', '**', '*.entity.{ts,js}')], 
       migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
-      synchronize: false, 
+      synchronize: true, 
       autoLoadEntities: true, 
     }),
     AuthModule,
