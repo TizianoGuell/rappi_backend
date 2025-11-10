@@ -3,6 +3,8 @@ import { AdminController } from './admin.controller';
 import { CommissionService } from './commission.service';
 import { VendorProfileService } from './vendor-profile.service';
 import { ReportsModule } from '../reports/reports.module';
+import { AuthModule } from '../auth/auth.module';
+import { OrdersModule } from '../orders/orders.module';
 import { RestaurantsModule } from '../restaurants/restaurants.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Pedido } from '../orders/order.entity';
@@ -10,7 +12,9 @@ import { Pedido } from '../orders/order.entity';
 @Module({
   imports: [
     ReportsModule,
+    AuthModule,
     RestaurantsModule,
+    OrdersModule,
     TypeOrmModule.forFeature([Pedido]),
   ],
   controllers: [AdminController],

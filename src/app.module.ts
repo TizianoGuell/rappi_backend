@@ -35,16 +35,16 @@ class MigrationsRunner implements OnModuleInit {
   }
 }
 
+
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
-      database: join(__dirname, '..', 'RappiDB.db'),
-      entities: [join(__dirname, '..', '..', 'src', '**', '*.entity.{ts,js}')],
-      migrations: [
-        join(__dirname, '..', '..', 'src', 'migrations', '*.{ts,js}'),
-      ],
+      database: join(__dirname, '..', 'RappiDB.db'), 
+      entities: [join(__dirname, 'modules', '**', '*.entity.{ts,js}')], 
+      migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
       synchronize: false, 
+      autoLoadEntities: true, 
     }),
     AuthModule,
     UsersModule,

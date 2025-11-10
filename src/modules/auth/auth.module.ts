@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Global } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
@@ -8,6 +8,7 @@ import { User } from '../users/user.entity';
 import { Role } from './role.entity';
 import { AuthGuard } from './auth.guard';
 
+@Global()
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Role]),
@@ -18,6 +19,6 @@ import { AuthGuard } from './auth.guard';
   ],
   controllers: [AuthController],
   providers: [AuthService, AuthRepository, AuthGuard],
-  exports: [AuthService, AuthGuard],
+  exports: [AuthService, AuthGuard, JwtModule],
 })
 export class AuthModule {}

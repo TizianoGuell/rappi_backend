@@ -7,12 +7,10 @@ dotenv.config();
 const type = (process.env.DB_TYPE as any) || 'sqlite';
 
 export const AppDataSource = new DataSource({
-  type: type,
+  type,
   ...(type === 'sqlite'
     ? {
-        database:
-          process.env.DB_SQLITE_PATH ||
-          join(__dirname, '..', '..', 'RappiDB.db'),
+        database: process.env.DB_SQLITE_PATH || join(process.cwd(), 'RappiDB.db'),
       }
     : {
         host: process.env.DB_HOST,
@@ -21,7 +19,6 @@ export const AppDataSource = new DataSource({
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
       }),
-  entities: [join(__dirname, '..', '..', 'src', '**', '*.entity.{ts,js}')],
-  migrations: [join(__dirname, '..', '..', 'src', 'migrations', '*.{ts,js}')],
-  synchronize: false,
+  entities: [join(__dirname, '..', 'modules', '**', '*.entity.{ts,js}')],
+  synchronize: true,
 });
