@@ -25,8 +25,6 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-  // Avoid using `delete` on a required entity property (TS2790).
-  // Create a shallow copy and remove the password from the returned object.
   const result = { ...user } as any;
   if (result.password) delete result.password;
   return result;

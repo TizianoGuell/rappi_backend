@@ -8,7 +8,6 @@ import { Role } from '../src/modules/auth/role.entity';
 import { User } from '../src/modules/users/user.entity';
 import * as bcrypt from 'bcrypt';
 
-// For safety, force the sqlite path to the test DB file
 process.env.DB_SQLITE_PATH = process.env.DB_SQLITE_PATH || join(__dirname, '..', 'RappiDB.db');
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || 'admin@local.test';

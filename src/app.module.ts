@@ -44,7 +44,7 @@ class MigrationsRunner implements OnModuleInit {
       migrations: [
         join(__dirname, '..', '..', 'src', 'migrations', '*.{ts,js}'),
       ],
-      synchronize: false, // importante: no modificar esquema existente
+      synchronize: false, 
     }),
     AuthModule,
     UsersModule,
