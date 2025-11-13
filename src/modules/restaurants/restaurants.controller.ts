@@ -148,6 +148,18 @@ export class RestaurantsController {
     return this.restaurantsService.findAll(q);
   }
 
+  @Get('categories')
+  async listCategories() {
+    return this.categoriesService ? this.categoriesService.findAll() : [];
+  }
+
+  @Get('categories/:id')
+  async getCategory(@Param('id', ParseIntPipe) id: number) {
+    return this.categoriesService
+      ? this.categoriesService.findOne(Number(id))
+      : null;
+  }
+
   @Get(':id')
   async getOne(@Param('id', ParseIntPipe) id: number) {
     return this.restaurantsService.findOne(id);
@@ -210,17 +222,7 @@ export class RestaurantsController {
     return this.restaurantsService.deleteMenu(menuId, requesterId);
   }
 
-  @Get('categories')
-  async listCategories() {
-    return this.categoriesService ? this.categoriesService.findAll() : [];
-  }
-
-  @Get('categories/:id')
-  async getCategory(@Param('id', ParseIntPipe) id: number) {
-    return this.categoriesService
-      ? this.categoriesService.findOne(Number(id))
-      : null;
-  }
+  
 
   @Post('categories')
   @UseGuards(AuthGuard, RolesGuard)
