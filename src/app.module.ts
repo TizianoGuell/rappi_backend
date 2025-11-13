@@ -38,9 +38,13 @@ class MigrationsRunner implements OnModuleInit {
 
 @Module({
   imports: [
+    // Resolve DB path robustly so running from `dist` does not create/use dist/RappiDB.db
     TypeOrmModule.forRoot({
       type: 'sqlite',
-      database: join(__dirname, '..', 'RappiDB.db'), 
+      database:
+        process.env.DB_SQLITE_PATH || (__dirname.includes('dist')
+          ? join(__dirname, '..', '..', 'RappiDB.db')
+          : join(__dirname, '..', 'RappiDB.db')),
       entities: [join(__dirname, 'modules', '**', '*.entity.{ts,js}')], 
       migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
       synchronize: true, 

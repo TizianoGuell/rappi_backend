@@ -71,7 +71,10 @@ export class AuthService {
       role: user.role?.id ?? null,
     };
     const token = this.jwtService.sign(payload);
-    return { access_token: token };
+    return {
+      access_token: token,
+      role: user.role ? { id: user.role.id, name: user.role.name } : null,
+    };
   }
 
   async validateUserById(id: number) {
