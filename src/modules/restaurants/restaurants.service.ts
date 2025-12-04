@@ -172,4 +172,25 @@ export class RestaurantsService {
     await this.menusRepo.remove(menu);
     return { deleted: true };
   }
+
+  async findMenuById(menuId: number) {
+    const menu = await this.menusRepo.findOneById(menuId);
+    if (!menu) throw new NotFoundException('Menu not found');
+
+    try {
+      if (this.menuImagesService) {
+        menu.images = await this.menuImagesService.listImages(menu.id);
+      }
+    } catch {
+    }
+    try {
+      if (this.promotionsService) {
+        menu.promotions = await this.promotionsService.findPromotionsForProduct(
+          menu.id,
+        );
+      }
+    } catch {
+    }
+    return menu;
+  }
 }

@@ -99,6 +99,11 @@ export class RestaurantsController {
     return this.menuImagesService.createImage(menuId, url, false);
   }
 
+  @Get('menus/:menuId')
+  async getMenu(@Param('menuId', ParseIntPipe) menuId: number) {
+    return this.restaurantsService.findMenuById(menuId);
+  }
+
   @Get('menus/:menuId/images')
   async listMenuImages(@Param('menuId', ParseIntPipe) menuId: number) {
     if (!this.menuImagesService) return [];
@@ -137,6 +142,46 @@ export class RestaurantsController {
     if (!this.menuImagesService)
       throw new BadRequestException('image service not available');
     return this.menuImagesService.markPrimary(menuId, imageId);
+  }
+
+  @UseGuards(AuthGuard)
+  @Post(':id/logo')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const dest = './uploads/restaurants';
+          try { ensureDirSync(dest); } catch {}
+          cb(null, dest);
+        },
+        filename: (req, file, cb) => {
+          const name = `${Date.now()}-${Math.random().toString(36).substring(2,8)}${extname(file.originalname)}`;
+          cb(null, name);
+        },
+      }),
+    }),
+  )
+  async uploadRestaurantLogo(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: any,
+  ) {
+    const requesterId = req.user?.sub ?? req.user?.id;
+    if (!file || !file.filename) throw new BadRequestException('file is required');
+    const url = `/uploads/restaurants/${file.filename}`;
+    return this.restaurantsService.update(id, { logo: url } as any, requesterId);
+  }
+
+  @UseGuards(AuthGuard)
+  @Put(':id/logo')
+  async setRestaurantLogoByUrl(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { imageUrl: string },
+  ) {
+    const requesterId = req.user?.sub ?? req.user?.id;
+    if (!body || !body.imageUrl) throw new BadRequestException('imageUrl is required');
+    return this.restaurantsService.update(id, { logo: body.imageUrl } as any, requesterId);
   }
 
   @Get()

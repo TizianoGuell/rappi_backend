@@ -5,6 +5,7 @@ import { OrdersController } from './orders.controller';
 import { OrdersGateway } from './orders.gateway';
 import { Pedido } from './order.entity';
 import { PedidoDetalle } from './order-detail.entity';
+import { PedidoRestaurante } from './pedido-restaurante.entity';
 import { CartModule } from '../cart/cart.module';
 import { forwardRef } from '@nestjs/common';
 import { PaymentsModule } from '../payments/payments.module';
@@ -21,6 +22,7 @@ import { MenuRepository } from '../restaurants/menu.repository';
     TypeOrmModule.forFeature([
       Pedido,
       PedidoDetalle,
+      PedidoRestaurante,
       Address,
       Coupon,
       Promotion,

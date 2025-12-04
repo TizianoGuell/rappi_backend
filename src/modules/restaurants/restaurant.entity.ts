@@ -39,6 +39,9 @@ export class Restaurant {
   @OneToMany(() => Menu, (menu) => menu.restaurant, { cascade: true })
   menus?: Menu[];
 
+  @Column({ nullable: true })
+  logo?: string;
+
   @Column({ default: true })
   isActive: boolean;
 

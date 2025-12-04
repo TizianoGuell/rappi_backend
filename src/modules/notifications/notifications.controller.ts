@@ -25,6 +25,13 @@ export class NotificationsController {
   }
 
   @UseGuards(AuthGuard)
+  @Get('unread-count')
+  async unreadCount(@Req() req: any) {
+    const count = await this.notifService.countUnreadForUser(req.user.sub);
+    return { unread: count };
+  }
+
+  @UseGuards(AuthGuard)
   @Patch(':id/read')
   async markRead(@Req() req: any, @Param('id') id: string) {
     return this.notifService.markAsRead(req.user.sub, Number(id));

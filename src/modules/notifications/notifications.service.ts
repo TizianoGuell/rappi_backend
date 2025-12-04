@@ -20,7 +20,7 @@ export class NotificationsService {
       title: dto.title,
       body: dto.body,
       type: dto.type,
-      data: dto.data,
+      data: dto.data && typeof dto.data !== 'string' ? JSON.stringify(dto.data) : dto.data,
     } as any);
     return this.notifRepo.save(notif);
   }
@@ -30,6 +30,15 @@ export class NotificationsService {
       where: { user: { id: userId } as any },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async countUnreadForUser(userId: number) {
+    const qb = this.notifRepo.createQueryBuilder('n');
+    const count = await qb
+      .where('n.userId = :userId', { userId })
+      .andWhere('n.read = 0')
+      .getCount();
+    return count;
   }
 
   async markAsRead(userId: number, id: number) {

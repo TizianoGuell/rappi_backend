@@ -19,3 +19,22 @@ export const OrderStatusLabels: Record<number, string> = {
 export function isFinalStatus(status: number) {
   return status === OrderStatus.DELIVERED || status === OrderStatus.CANCELLED;
 }
+
+export function getOrderStatusMessage(status: number) {
+  switch (status) {
+    case OrderStatus.CREATED:
+      return 'Tu pedido ha sido recibido.';
+    case OrderStatus.PREPARING:
+      return 'Tu pedido está en preparación.';
+    case OrderStatus.READY:
+      return 'Tu pedido está listo.';
+    case OrderStatus.ON_THE_WAY:
+      return 'Tu pedido está en camino.';
+    case OrderStatus.DELIVERED:
+      return 'Tu pedido fue entregado.';
+    case OrderStatus.CANCELLED:
+      return 'Tu pedido fue cancelado.';
+    default:
+      return 'El estado de tu pedido ha cambiado.';
+  }
+}

@@ -45,4 +45,7 @@ export class Pedido {
 
   @Column({ type: 'real', default: 0 })
   impuestos: number;
+
+  @Column({ name: 'restaurant_id', nullable: true })
+  restaurantId?: number;
 }

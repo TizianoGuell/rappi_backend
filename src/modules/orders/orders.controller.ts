@@ -27,6 +27,11 @@ class DriverUpdateStatusDto {
   estadoId: number;
 }
 
+class UpdateSuborderStatusDto {
+  @IsInt()
+  estadoId: number;
+}
+
 @UseGuards(AuthGuard, RolesGuard)
 @Controller('orders')
 export class OrdersController {
@@ -78,6 +83,19 @@ export class OrdersController {
     return this.ordersService.getVendorOrders(Number(userId), p, l);
   }
 
+  @Get('vendor/suborders')
+  @Roles('vendor')
+  async vendorSuborders(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const userId = req.user?.sub ?? req.user?.id;
+    const p = page ? Number(page) : 1;
+    const l = limit ? Number(limit) : 20;
+    return this.ordersService.getVendorSuborders(Number(userId), p, l, true);
+  }
+
   @Patch('vendor/:id/status')
   @Roles('vendor')
   async vendorUpdateStatus(
@@ -87,6 +105,21 @@ export class OrdersController {
   ) {
     const userId = req.user?.sub ?? req.user?.id;
     return this.ordersService.updateOrderStatus(
+      Number(userId),
+      id,
+      dto.estadoId,
+    );
+  }
+
+  @Patch('vendor/suborders/:id/status')
+  @Roles('vendor')
+  async vendorUpdateSuborderStatus(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateSuborderStatusDto,
+  ) {
+    const userId = req.user?.sub ?? req.user?.id;
+    return this.ordersService.updateSuborderStatus(
       Number(userId),
       id,
       dto.estadoId,

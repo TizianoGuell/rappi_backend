@@ -8,6 +8,7 @@ import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Pedido } from './order.entity';
 import { PedidoDetalle } from './order-detail.entity';
+import { PedidoRestaurante } from './pedido-restaurante.entity';
 import { CartService } from '../cart/cart.service';
 import { CreateOrderDto } from './dtos/create-order.dto';
 import { mapPaymentMethodToId } from './payment-method.enum';
@@ -18,7 +19,7 @@ import { Coupon } from '../promotions/coupon.entity';
 import { Address } from '../users/address.entity';
 import { Promotion } from '../promotions/promotion.entity';
 import { PaymentsService } from '../payments/payments.service';
-import { OrderStatus, isFinalStatus } from './order-status.enum';
+import { OrderStatus, isFinalStatus, getOrderStatusMessage } from './order-status.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { Menu } from '../restaurants/menu.entity';
@@ -39,6 +40,10 @@ export class OrdersService {
     private readonly paymentsService: PaymentsService,
     private readonly notificationsService: NotificationsService,
 
+    @Optional()
+    @InjectRepository(PedidoRestaurante)
+    private readonly pedidoRestRepo?: Repository<PedidoRestaurante>,
+
     @Optional() private readonly promotionsService?: PromotionsService,
 
     private readonly menuRepository?: MenuRepository,
@@ -51,6 +56,69 @@ export class OrdersService {
     @InjectRepository(DriverPosition)
     private readonly driverPositionRepo?: Repository<DriverPosition>,
   ) {}
+
+  async getVendorSuborders(vendorId: number, page = 1, limit = 20, bypassOwnerCheck = false) {
+    if (!this.pedidoRestRepo) return { items: [], total: 0, page, limit };
+    const skip = (page - 1) * limit;
+    const qb = this.pedidoRestRepo.createQueryBuilder('pr')
+      .leftJoin('restaurants', 'r', 'r.id = pr.restaurant_id');
+
+    if (!bypassOwnerCheck) qb.where('r.ownerId = :vendorId', { vendorId });
+
+    qb.orderBy('pr.created_at', 'DESC').limit(limit).offset(skip);
+
+    const items = await qb.getRawMany();
+
+    const totalQ = this.pedidoRestRepo.createQueryBuilder('pr').leftJoin('restaurants', 'r', 'r.id = pr.restaurant_id');
+    if (!bypassOwnerCheck) totalQ.where('r.ownerId = :vendorId', { vendorId });
+    const total = await totalQ.getCount();
+    return { items, total, page, limit };
+  }
+
+  async updateSuborderStatus(vendorId: number, suborderId: number, estadoId: number) {
+    if (!this.pedidoRestRepo) throw new NotFoundException('Suborder not found');
+    const qb = this.pedidoRestRepo.createQueryBuilder('pr')
+      .leftJoin('restaurants', 'r', 'r.id = pr.restaurant_id')
+      .leftJoin('pedidos', 'p', 'p.id = pr.pedido_id')
+      .where('pr.id = :id', { id: suborderId })
+      .andWhere('r.ownerId = :vendorId', { vendorId })
+      .select(['pr.*', 'p.clienteId as clienteId']);
+
+    const raw = await qb.getRawOne();
+    if (!raw) throw new NotFoundException('Suborder not found or not owned by vendor');
+
+    await this.pedidoRestRepo.query(`UPDATE pedido_restaurante SET estado_id = ? WHERE id = ?`, [estadoId, suborderId]);
+
+    try {
+      const pedidoId = Number(raw.pedido_id || raw.pedidoId || raw.pr_pedido_id)
+      if (pedidoId && Number(estadoId) === OrderStatus.READY) {
+        const parent = await this.pedidoRepo.findOne({ where: { id: pedidoId } as any });
+        if (parent && Number(parent.estadoId) < OrderStatus.READY) {
+          parent.estadoId = OrderStatus.READY;
+          await this.pedidoRepo.save(parent as any);
+        }
+      }
+    } catch (e) {
+    }
+
+    try {
+      const clienteId = raw.clienteId ?? null;
+      if (clienteId) {
+        await this.notificationsService.createForUser(Number(clienteId), {
+          title: `Actualización pedido ${raw.pedido_id}`,
+          body: getOrderStatusMessage(Number(estadoId)),
+          type: 'order',
+          data: { orderId: raw.pedido_id, suborderId: suborderId, status: estadoId },
+        } as any);
+      }
+    } catch (e) {}
+
+    try {
+      this.ordersGateway?.emitOrderUpdate(raw.pedido_id, { status: estadoId });
+    } catch (e) {}
+
+    return { id: suborderId, estadoId } as any;
+  }
 
   async createFromCart(userId: number, dto: CreateOrderDto) {
     let direccionEntrega = dto.direccionEntrega;
@@ -169,7 +237,8 @@ export class OrdersService {
         const metodoPagoIdResolved =
           dto.metodoPagoId ?? mapPaymentMethodToId((dto as any).paymentMethod);
 
-        let vendorIdResolved: number | null = null;
+  let vendorIdResolved: number | null = null;
+  let restaurantIdResolved: number | null = null;
         if (
           items &&
           items.length > 0 &&
@@ -181,8 +250,11 @@ export class OrdersService {
             const menu = await (this.menuRepository.findOneById as any)(
               firstProduct.productoId,
             );
-            if (menu && menu.restaurant && menu.restaurant.owner) {
-              vendorIdResolved = menu.restaurant.owner.id;
+            if (menu && menu.restaurant) {
+              restaurantIdResolved = menu.restaurant.id ?? null;
+              if (menu.restaurant.owner) {
+                vendorIdResolved = menu.restaurant.owner.id;
+              }
             }
           } catch (e) {}
         }
@@ -197,6 +269,7 @@ export class OrdersService {
           impuestos,
           estadoId: 1,
           vendorId: vendorIdResolved ?? null,
+          restaurantId: restaurantIdResolved ?? null,
         } as Partial<Pedido>);
 
         if (this.paymentsService) {
@@ -273,6 +346,58 @@ export class OrdersService {
           await detalleRepo.save(detalles as any);
         }
 
+        try {
+          const groups: Map<number, { total: number; ownerId?: number | null }> = new Map();
+          if (items && items.length > 0 && this.menuRepository && typeof this.menuRepository.findOneById === 'function') {
+            for (const it of items) {
+              try {
+                const menu = await (this.menuRepository.findOneById as any)(it.productoId);
+                const restId = menu?.restaurant?.id ?? menu?.restaurant_id ?? menu?.restaurantId ?? null;
+                const ownerId = menu?.restaurant?.owner?.id ?? menu?.restaurant?.ownerId ?? null;
+                if (!restId) continue;
+                const prev = groups.get(restId) || { total: 0, ownerId: ownerId ?? null };
+                prev.total += (Number(it.precioUnitario || 0) * Number(it.cantidad || 0));
+                
+                if (!prev.ownerId && ownerId) prev.ownerId = ownerId;
+                groups.set(restId, prev);
+              } catch (e) {
+              }
+            }
+          }
+
+          if (groups.size > 0 && manager) {
+            for (const [restaurantId, info] of groups.entries()) {
+              try {
+                await manager.query(
+                  `INSERT INTO pedido_restaurante (pedido_id, restaurant_id, estado_id, total, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
+                  [savedPedido.id, restaurantId, 1, info.total],
+                );
+
+                let ownerId = info.ownerId ?? null;
+                if (!ownerId) {
+                  try {
+                    const rr: any[] = await manager.query(`SELECT ownerId as ownerId, owner_id as owner_id FROM restaurants WHERE id = ?`, [restaurantId]);
+                    if (rr && rr[0]) ownerId = rr[0].ownerId ?? rr[0].owner_id ?? null;
+                  } catch (e) {}
+                }
+
+                if (ownerId) {
+                  try {
+                    await this.notificationsService.createForUser(Number(ownerId), {
+                      title: `Nuevo pedido ${savedPedido.id}`,
+                      body: `Tienes un nuevo pedido #${savedPedido.id}`,
+                      type: 'order',
+                      data: { orderId: savedPedido.id, status: OrderStatus.CREATED },
+                    } as any);
+                  } catch (e) {}
+                }
+              } catch (e) {
+              }
+            }
+          }
+        } catch (e) {
+        }
+
         await cartItemRepo
           .createQueryBuilder()
           .delete()
@@ -347,7 +472,8 @@ export class OrdersService {
     const metodoPagoIdResolved =
       dto.metodoPagoId ?? mapPaymentMethodToId((dto as any).paymentMethod);
 
-    let vendorIdResolved: number | null = null;
+  let vendorIdResolved: number | null = null;
+  let restaurantIdResolved: number | null = null;
     if (
       items &&
       items.length > 0 &&
@@ -359,8 +485,11 @@ export class OrdersService {
         const menu = await (this.menuRepository.findOneById as any)(
           firstProduct.productoId,
         );
-        if (menu && menu.restaurant && menu.restaurant.owner) {
-          vendorIdResolved = menu.restaurant.owner.id;
+        if (menu && menu.restaurant) {
+          restaurantIdResolved = menu.restaurant.id ?? null;
+          if (menu.restaurant.owner) {
+            vendorIdResolved = menu.restaurant.owner.id;
+          }
         }
       } catch (e) {}
     }
@@ -375,6 +504,7 @@ export class OrdersService {
       impuestos,
       estadoId: 1,
       vendorId: vendorIdResolved ?? null,
+      restaurantId: restaurantIdResolved ?? null,
     } as Partial<Pedido>);
 
     if (this.paymentsService) {
@@ -411,6 +541,57 @@ export class OrdersService {
     } else {
       await this.detalleRepo.save(detalles as any);
     }
+
+    try {
+      const groups: Map<number, { total: number; ownerId?: number | null }> = new Map();
+      if (items && items.length > 0 && this.menuRepository && typeof this.menuRepository.findOneById === 'function') {
+        for (const it of items) {
+          try {
+            const menu = await (this.menuRepository.findOneById as any)(it.productoId);
+            const restId = menu?.restaurant?.id ?? menu?.restaurant_id ?? menu?.restaurantId ?? null;
+            const ownerId = menu?.restaurant?.owner?.id ?? menu?.restaurant?.ownerId ?? null;
+            if (!restId) continue;
+            const prev = groups.get(restId) || { total: 0, ownerId: ownerId ?? null };
+            prev.total += (Number(it.precioUnitario || 0) * Number(it.cantidad || 0));
+            if (!prev.ownerId && ownerId) prev.ownerId = ownerId;
+            groups.set(restId, prev);
+          } catch (e) {
+          }
+        }
+      }
+
+      if (groups.size > 0 && this.pedidoRestRepo) {
+        for (const [restaurantId, info] of groups.entries()) {
+          try {
+            await this.pedidoRestRepo.query(
+              `INSERT INTO pedido_restaurante (pedido_id, restaurant_id, estado_id, total, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
+              [savedPedido.id, restaurantId, 1, info.total],
+            );
+
+            let ownerId = info.ownerId ?? null;
+            if (!ownerId) {
+              try {
+                const rr: any[] = await this.pedidoRestRepo.query(`SELECT ownerId as ownerId, owner_id as owner_id FROM restaurants WHERE id = ?`, [restaurantId]);
+                if (rr && rr[0]) ownerId = rr[0].ownerId ?? rr[0].owner_id ?? null;
+              } catch (e) {}
+            }
+
+            if (ownerId) {
+              try {
+                await this.notificationsService.createForUser(Number(ownerId), {
+                  title: `Nuevo pedido ${savedPedido.id}`,
+                  body: `Tienes un nuevo pedido #${savedPedido.id}`,
+                  type: 'order',
+                  data: { orderId: savedPedido.id, status: OrderStatus.CREATED },
+                } as any);
+              } catch (e) {}
+            }
+          } catch (e) {
+            // continue on failure
+          }
+        }
+      }
+    } catch (e) {}
 
     await this.cartService.clearCart(userId);
 
@@ -693,9 +874,9 @@ export class OrdersService {
     if (order.driverId) throw new ForbiddenException('Order already assigned');
     if (isFinalStatus(Number(order.estadoId)))
       throw new ForbiddenException('Cannot assign finalised order');
+    // assign driver but do not automatically change the order status to ON_THE_WAY
+    // so the driver can explicitly mark it "on the way" when starting delivery.
     order.driverId = driverId;
-
-    order.estadoId = OrderStatus.ON_THE_WAY;
     await this.pedidoRepo.save(order as any);
 
     try {
@@ -704,20 +885,20 @@ export class OrdersService {
           title: `Pedido ${order.id} asignado a repartidor`,
           body: `El pedido ${order.id} fue aceptado por un repartidor.`,
           type: 'order',
-          data: { orderId: order.id, status: OrderStatus.ON_THE_WAY },
+          data: { orderId: order.id, assigned: true },
         } as any);
       }
       if (order.clienteId) {
         await this.notificationsService.createForUser(Number(order.clienteId), {
-          title: `Tu pedido ${order.id} está en camino`,
+          title: `Tu pedido ${order.id} fue tomado por un repartidor`,
           body: `Un repartidor ha sido asignado a tu pedido.`,
           type: 'order',
-          data: { orderId: order.id, status: OrderStatus.ON_THE_WAY },
+          data: { orderId: order.id, assigned: true },
         } as any);
       }
     } catch (e) {}
     try {
-      this.ordersGateway?.emitOrderUpdate(order.id, { status: order.estadoId });
+      this.ordersGateway?.emitOrderUpdate(order.id, { assignedTo: driverId, status: order.estadoId });
     } catch (e) {}
     return order;
   }
@@ -742,7 +923,7 @@ export class OrdersService {
       if (order.clienteId) {
         await this.notificationsService.createForUser(Number(order.clienteId), {
           title: `Actualización de pedido ${order.id}`,
-          body: `El estado de tu pedido cambió a ${estadoId}.`,
+          body: getOrderStatusMessage(Number(estadoId)),
           type: 'order',
           data: { orderId: order.id, status: estadoId },
         } as any);

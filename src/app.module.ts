@@ -14,6 +14,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SupportModule } from './modules/support/support.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 
 @Injectable()
@@ -38,7 +39,6 @@ class MigrationsRunner implements OnModuleInit {
 
 @Module({
   imports: [
-    // Resolve DB path robustly so running from `dist` does not create/use dist/RappiDB.db
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database:
@@ -60,6 +60,7 @@ class MigrationsRunner implements OnModuleInit {
     OrdersModule,
     FavoritesModule,
     NotificationsModule,
+  ReviewsModule,
     SupportModule,
   ],
   providers: [MigrationsRunner],

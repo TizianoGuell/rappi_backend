@@ -17,6 +17,25 @@ export class PromotionsService {
     private promoProductRepo?: Repository<PromotionProduct>,
   ) {}
 
+  async findByCode(code: string) {
+    if (!code) return null;
+    try {
+      const p = await this.promoRepo.findOne({ where: { code, active: true } as any });
+      return p || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async validateCode(code: string, subtotal: number, items: any[], menuRepo?: Repository<Menu>) {
+    const promo = await this.findByCode(code);
+    if (!promo) return { valid: false, discount: 0 };
+    const discount = await this.computeDiscount(promo, subtotal, items, menuRepo);
+    const hasAmount = typeof (promo as any).amount === 'number' && (promo as any).amount > 0;
+    const hasPercent = typeof (promo as any).percent === 'number' && (promo as any).percent > 0;
+    return { valid: discount > 0 || hasAmount || hasPercent, discount: discount || 0, promotion: promo };
+  }
+
   async computeDiscount(
     promo: any,
     subtotal: number,

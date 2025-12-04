@@ -96,4 +96,13 @@ export class PromotionsController {
     await this.promotionsService.deactivateExpired();
     return { ok: true };
   }
+
+  @Post('validate')
+  async validate(@Body() body: any) {
+    const code = String(body?.code || '').trim();
+    const subtotal = Number(body?.subtotal || 0);
+    const items = Array.isArray(body?.items) ? body.items : [];
+    const result = await this.promotionsService.validateCode(code, subtotal, items);
+    return result;
+  }
 }
